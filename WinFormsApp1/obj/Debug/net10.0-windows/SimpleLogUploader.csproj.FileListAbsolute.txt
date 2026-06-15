@@ -1,0 +1,17 @@
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.Main.resources
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.csproj.GenerateResource.cache
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.GeneratedMSBuildEditorConfig.editorconfig
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.AssemblyInfoInputs.cache
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.AssemblyInfo.cs
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.csproj.CoreCompileInputs.cache
+F:\Work\Simple\WinFormsApp1\bin\Debug\net10.0-windows\SimpleLogUploader.exe
+F:\Work\Simple\WinFormsApp1\bin\Debug\net10.0-windows\SimpleLogUploader.dll.config
+F:\Work\Simple\WinFormsApp1\bin\Debug\net10.0-windows\SimpleLogUploader.deps.json
+F:\Work\Simple\WinFormsApp1\bin\Debug\net10.0-windows\SimpleLogUploader.runtimeconfig.json
+F:\Work\Simple\WinFormsApp1\bin\Debug\net10.0-windows\SimpleLogUploader.dll
+F:\Work\Simple\WinFormsApp1\bin\Debug\net10.0-windows\SimpleLogUploader.pdb
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.dll
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\refint\SimpleLogUploader.dll
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.pdb
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\SimpleLogUploader.genruntimeconfig.cache
+F:\Work\Simple\WinFormsApp1\obj\Debug\net10.0-windows\ref\SimpleLogUploader.dll
