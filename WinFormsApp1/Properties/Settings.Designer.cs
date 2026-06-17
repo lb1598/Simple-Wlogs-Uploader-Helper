@@ -70,5 +70,17 @@ namespace SimpleLogUploader.Properties {
                 this["UploaderPath"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Largest")]
+        public string FileMode {
+            get {
+                return ((string)(this["FileMode"]));
+            }
+            set {
+                this["FileMode"] = value;
+            }
+        }
     }
 }

@@ -5,9 +5,10 @@ namespace SimpleLogUploader {
     public partial class Main : Form {
 
         private string selectedFolder = string.Empty;
-        private string largestFile = string.Empty;
+        private string targetFile = string.Empty;
         private string accessToken = string.Empty;
         private string uploaderPath = string.Empty;
+        private string fileMode = "Largest";
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -17,24 +18,21 @@ namespace SimpleLogUploader {
         public Main() {
             InitializeComponent();
 
-            btnSelectFolder.Click += new EventHandler(BrowseFolder_Click);
             btnLogin.Click += new EventHandler(Login_Click);
             btnUpload.Click += new EventHandler(Upload_Click);
-            btnUploaderPath.Click += new EventHandler(BrowseUploaderPath_Click);
+
+            if (DesignMode) return;
 
             _ = LoadTokenOnStartup();
 
-            // Load saved folder
             selectedFolder = Properties.Settings.Default.FolderPath ?? string.Empty;
             if (!string.IsNullOrEmpty(selectedFolder)) {
-                txtFolderPath.Text = selectedFolder;
-                largestFile = GetLargestFile(selectedFolder);
-                Log($"Loaded saved folder: {selectedFolder}");
+                targetFile = GetTargetFile(selectedFolder);
+                Log("Loaded saved folder: " + selectedFolder);
             }
 
-            // Load saved uploader path
             uploaderPath = Properties.Settings.Default.UploaderPath ?? DefaultUploaderPath;
-            txtUploaderPath.Text = uploaderPath;
+            fileMode = Properties.Settings.Default.FileMode ?? "Largest";
         }
 
         private void Log(string message) {
@@ -65,84 +63,70 @@ namespace SimpleLogUploader {
                 return;
             }
 
-            largestFile = GetLargestFile(selectedFolder);
+            targetFile = GetTargetFile(selectedFolder);
 
-            if (string.IsNullOrEmpty(largestFile)) {
+            if (string.IsNullOrEmpty(targetFile)) {
                 Log("No files found in selected folder.");
                 return;
             }
 
-            Log($"Uploading largest file: {Path.GetFileName(largestFile)}");
-            await UploadLog(largestFile);
+            Log("Uploading " + fileMode.ToLower() + " file: " + Path.GetFileName(targetFile));
+            await UploadLog(targetFile);
         }
 
-        private void BrowseFolder_Click(object sender, EventArgs e) {
-            using FolderBrowserDialog dialog = new FolderBrowserDialog {
-                Description = "Select a folder",
-                UseDescriptionForTitle = true
-            };
-
-            if (dialog.ShowDialog() == DialogResult.OK) {
-                selectedFolder = dialog.SelectedPath;
-                largestFile = GetLargestFile(selectedFolder);
-                txtFolderPath.Text = selectedFolder;
-                Log($"Selected folder: {selectedFolder}");
-                Log($"Largest file: {Path.GetFileName(largestFile)}");
-
-                Properties.Settings.Default.FolderPath = selectedFolder;
-                Properties.Settings.Default.Save();
-            }
-        }
-
-        private void BrowseUploaderPath_Click(object sender, EventArgs e) {
-            using OpenFileDialog dialog = new OpenFileDialog {
-                Title = "Select Warcraft Logs Uploader",
-                Filter = "Executable files (*.exe)|*.exe",
-                CheckFileExists = true
-            };
-
-            if (dialog.ShowDialog() == DialogResult.OK) {
-                string path = dialog.FileName;
-
-                if (!path.EndsWith(@"Warcraft Logs Uploader\Warcraft Logs Uploader.exe",
-                        StringComparison.OrdinalIgnoreCase)) {
-                    Log("Invalid selection. Please select 'Warcraft Logs Uploader\\Warcraft Logs Uploader.exe'.");
-                    return;
-                }
-
-                uploaderPath = path;
-                txtUploaderPath.Text = path;
-                Log($"Uploader path set: {path}");
-
-                Properties.Settings.Default.UploaderPath = path;
-                Properties.Settings.Default.Save();
-            }
-        }
+        private string GetTargetFile(string folderPath) => fileMode switch {
+            "Newest" => GetNewestFile(folderPath),
+            "Oldest" => GetOldestFile(folderPath),
+            _ => GetLargestFile(folderPath)
+        };
 
         private string GetLargestFile(string folderPath) {
-            string[] files = Directory.GetFiles(folderPath);
+            string[] files = Directory.GetFiles(folderPath, "*.txt");
+            if (files.Length == 0) return string.Empty;
+            return files.MaxBy(f => new FileInfo(f).Length) ?? string.Empty;
+        }
 
-            if (files.Length == 0)
-                return string.Empty;
+        private string GetOldestFile(string folderPath) {
+            string[] files = Directory.GetFiles(folderPath, "*.txt");
+            if (files.Length == 0) return string.Empty;
+            return files.MinBy(f => new FileInfo(f).LastWriteTime) ?? string.Empty;
+        }
 
-            return files
-                .OrderByDescending(f => new FileInfo(f).Length)
-                .First();
+        private string GetNewestFile(string folderPath) {
+            string[] files = Directory.GetFiles(folderPath, "*.txt");
+            if (files.Length == 0) return string.Empty;
+            return files.MaxBy(f => new FileInfo(f).LastWriteTime) ?? string.Empty;
         }
 
         private async void Login_Click(object sender, EventArgs e) {
             string savedClientId = Properties.Settings.Default.ClientId ?? AuthHelper.ClientId;
             string savedRedirect = Properties.Settings.Default.RedirectUrl ?? AuthHelper.RedirectUrl;
 
-            using var settingsForm = new SettingsForm(savedClientId, savedRedirect, uploaderPath, selectedFolder);
+            using var settingsForm = new SettingsForm(savedClientId, savedRedirect, uploaderPath, selectedFolder, fileMode);
             if (settingsForm.ShowDialog(this) != DialogResult.OK) return;
 
             Properties.Settings.Default.ClientId = settingsForm.ClientId;
             Properties.Settings.Default.RedirectUrl = settingsForm.RedirectUrl;
+            Properties.Settings.Default.UploaderPath = settingsForm.UploaderPath;
+            Properties.Settings.Default.FolderPath = settingsForm.FolderPath;
+            Properties.Settings.Default.FileMode = settingsForm.FileMode;
             Properties.Settings.Default.Save();
 
             AuthHelper.ClientId = settingsForm.ClientId;
             AuthHelper.RedirectUrl = settingsForm.RedirectUrl;
+            uploaderPath = settingsForm.UploaderPath;
+            selectedFolder = settingsForm.FolderPath;
+            fileMode = settingsForm.FileMode;
+
+            if (!string.IsNullOrEmpty(selectedFolder)) {
+                targetFile = GetTargetFile(selectedFolder);
+                Log("Folder set: " + selectedFolder);
+            }
+
+            if (string.IsNullOrWhiteSpace(settingsForm.ClientId) || string.IsNullOrWhiteSpace(settingsForm.RedirectUrl)) {
+                Log("Settings saved. Fill in Client ID and Redirect URL to log in.");
+                return;
+            }
 
             accessToken = await AuthHelper.GetAccessToken();
             Log("Logged in successfully!");
@@ -160,7 +144,7 @@ namespace SimpleLogUploader {
                 string appName = Path.GetFileNameWithoutExtension(uploaderPath);
                 Process? existing = Process.GetProcessesByName(appName)
                     .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
-                Log($"Process '{appName}' already running: {existing != null}");
+                Log("Process '" + appName + "' already running: " + (existing != null));
 
                 if (existing != null) {
                     SetForegroundWindow(existing.MainWindowHandle);
@@ -192,7 +176,7 @@ namespace SimpleLogUploader {
                     Log("Could not find uploader window.");
                     return;
                 }
-                Log($"Window found: '{window.Current.Name}'");
+                Log("Window found: '" + window.Current.Name + "'");
 
                 AutomationElement? uploadTab = null;
                 Task findTab = Task.Run(() => {
@@ -201,7 +185,7 @@ namespace SimpleLogUploader {
                 });
 
                 bool tabFound = await Task.WhenAny(findTab, Task.Delay(10000)) == findTab;
-                Log($"Upload a Log tab found: {tabFound && uploadTab != null}");
+                Log("Upload a Log tab found: " + (tabFound && uploadTab != null));
 
                 if (tabFound && uploadTab != null) {
                     await Task.Run(() => {
@@ -221,7 +205,7 @@ namespace SimpleLogUploader {
                 });
 
                 bool chooseFound = await Task.WhenAny(findChoose, Task.Delay(10000)) == findChoose;
-                Log($"Choose button found: {chooseFound && chooseButton != null}");
+                Log("Choose button found: " + (chooseFound && chooseButton != null));
 
                 if (!chooseFound || chooseButton == null) {
                     Log("Choose button not found or timed out.");
@@ -252,7 +236,7 @@ namespace SimpleLogUploader {
                     if (fileDialog != null) break;
                 }
 
-                Log(fileDialog == null ? "File dialog not found." : $"File dialog found: '{fileDialog.Current.Name}'");
+                Log(fileDialog == null ? "File dialog not found." : "File dialog found: '" + fileDialog.Current.Name + "'");
 
                 if (fileDialog == null) return;
 
@@ -273,7 +257,7 @@ namespace SimpleLogUploader {
                     }
                 }
 
-                Log(window == null ? "Could not re-find uploader window." : $"Re-found window: '{window.Current.Name}'");
+                Log(window == null ? "Could not re-find uploader window." : "Re-found window: '" + window.Current.Name + "'");
 
                 if (window == null) return;
 
@@ -284,7 +268,7 @@ namespace SimpleLogUploader {
                 });
 
                 bool goFound = await Task.WhenAny(findGo, Task.Delay(10000)) == findGo;
-                Log($"Go button found: {goFound && goButton != null}");
+                Log("Go button found: " + (goFound && goButton != null));
 
                 if (!goFound || goButton == null) {
                     Log("Go button not found or timed out.");
@@ -300,8 +284,12 @@ namespace SimpleLogUploader {
                 Log("Invoked and sent Space on Go button. Done!");
 
             } catch (Exception ex) {
-                Log($"Error: {ex.Message}");
+                Log("Error: " + ex.Message);
             }
+        }
+
+        private void Main_Load(object sender, EventArgs e) {
+            //
         }
     }
 }
