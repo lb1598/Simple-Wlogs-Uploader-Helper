@@ -13,6 +13,7 @@
 
         private void InitializeComponent() {
             btnUpload = new Button();
+            btnDelete = new Button();
             btnLogin = new Button();
             lblDebug = new TextBox();
             SuspendLayout();
@@ -28,6 +29,17 @@
             btnUpload.Text = "Upload";
             btnUpload.UseVisualStyleBackColor = false;
             // 
+            // btnDelete
+            // 
+            btnDelete.BackColor = SystemColors.Control;
+            btnDelete.ForeColor = Color.Black;
+            btnDelete.Location = new Point(520, 122);
+            btnDelete.Name = "btnDelete";
+            btnDelete.Size = new Size(75, 38);
+            btnDelete.TabIndex = 3;
+            btnDelete.Text = "Delete";
+            btnDelete.UseVisualStyleBackColor = false;
+            // 
             // btnLogin
             // 
             btnLogin.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -36,7 +48,7 @@
             btnLogin.Size = new Size(75, 23);
             btnLogin.TabIndex = 1;
             btnLogin.Text = "Settings";
-            btnLogin.UseVisualStyleBackColor = true;
+            btnLogin.UseVisualStyleBackColor = false;
             // 
             // lblDebug
             // 
@@ -49,10 +61,20 @@
             lblDebug.TabIndex = 6;
             lblDebug.Text = "Status: ready";
             // 
+            // btnDelete
+            // 
+            btnDelete.Location = new Point(520, 122);
+            btnDelete.Name = "btnDelete";
+            btnDelete.Size = new Size(75, 38);
+            btnDelete.TabIndex = 7;
+            btnDelete.Text = "Delete";
+            btnDelete.UseVisualStyleBackColor = false;
+            // 
             // Main
             // 
             BackColor = SystemColors.Control;
             ClientSize = new Size(607, 216);
+            Controls.Add(btnDelete);
             Controls.Add(lblDebug);
             Controls.Add(btnUpload);
             Controls.Add(btnLogin);
@@ -68,5 +90,6 @@
         private Button btnUpload;
         private Button btnLogin;
         private TextBox lblDebug;
+        private Button btnDelete;
     }
 }
