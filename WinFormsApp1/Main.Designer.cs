@@ -16,6 +16,7 @@
             btnDelete = new Button();
             btnLogin = new Button();
             lblDebug = new TextBox();
+            btnAutomate = new Button();
             SuspendLayout();
             // 
             // btnUpload
@@ -61,19 +62,22 @@
             lblDebug.TabIndex = 6;
             lblDebug.Text = "Status: ready";
             // 
-            // btnDelete
+            // btnAutomate
             // 
-            btnDelete.Location = new Point(520, 122);
-            btnDelete.Name = "btnDelete";
-            btnDelete.Size = new Size(75, 38);
-            btnDelete.TabIndex = 7;
-            btnDelete.Text = "Delete";
-            btnDelete.UseVisualStyleBackColor = false;
+            btnAutomate.BackColor = SystemColors.Control;
+            btnAutomate.ForeColor = Color.Black;
+            btnAutomate.Location = new Point(12, 210);
+            btnAutomate.Name = "btnAutomate";
+            btnAutomate.Size = new Size(120, 30);
+            btnAutomate.TabIndex = 8;
+            btnAutomate.Text = "Auto-Upload";
+            btnAutomate.UseVisualStyleBackColor = false;
             // 
             // Main
             // 
             BackColor = SystemColors.Control;
-            ClientSize = new Size(607, 216);
+            ClientSize = new Size(607, 252);
+            Controls.Add(btnAutomate);
             Controls.Add(btnDelete);
             Controls.Add(lblDebug);
             Controls.Add(btnUpload);
@@ -91,5 +95,6 @@
         private Button btnLogin;
         private TextBox lblDebug;
         private Button btnDelete;
+        private Button btnAutomate;
     }
 }

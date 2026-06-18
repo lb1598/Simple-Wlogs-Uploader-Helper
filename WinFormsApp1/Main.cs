@@ -21,6 +21,7 @@ namespace SimpleLogUploader {
             btnLogin.Click += new EventHandler(Login_Click);
             btnUpload.Click += new EventHandler(Upload_Click);
             btnDelete.Click += new EventHandler(Delete_Click);
+            btnAutomate.Click += new EventHandler(Automate_Click);
 
             if (DesignMode) return;
 
@@ -138,11 +139,15 @@ namespace SimpleLogUploader {
             await DeleteLog();
         }
 
-        private async Task DeleteLog() {
+        /// <summary>
+        /// Runs the delete sequence (Delete Now -> Yes -> Done) against the uploader app.
+        /// Returns true if every step completed successfully, false otherwise.
+        /// </summary>
+        private async Task<bool> DeleteLog() {
             try {
                 if (!File.Exists(uploaderPath)) {
                     Log("Warcraft Logs Uploader not found. Please set the uploader path.");
-                    return;
+                    return false;
                 }
 
                 string appName = Path.GetFileNameWithoutExtension(uploaderPath);
@@ -152,7 +157,7 @@ namespace SimpleLogUploader {
 
                 if (existing == null) {
                     Log("Uploader is not running. Nothing to delete.");
-                    return;
+                    return false;
                 }
 
                 SetForegroundWindow(existing.MainWindowHandle);
@@ -173,7 +178,7 @@ namespace SimpleLogUploader {
 
                 if (window == null) {
                     Log("Could not find uploader window.");
-                    return;
+                    return false;
                 }
                 Log("Window found: '" + window.Current.Name + "'");
 
@@ -189,7 +194,7 @@ namespace SimpleLogUploader {
 
                 if (!deleteFound || deleteButton == null) {
                     Log("Delete Now button not found or timed out.");
-                    return;
+                    return false;
                 }
 
                 await Task.Run(() => {
@@ -212,7 +217,7 @@ namespace SimpleLogUploader {
                 }
 
                 Log(window == null ? "Could not re-find uploader window after Delete Now." : "Re-found window: '" + window.Current.Name + "'");
-                if (window == null) return;
+                if (window == null) return false;
 
                 AutomationElement? yesButton = null;
                 Task findYes = Task.Run(() => {
@@ -225,7 +230,7 @@ namespace SimpleLogUploader {
 
                 if (!yesFound || yesButton == null) {
                     Log("Yes button not found or timed out.");
-                    return;
+                    return false;
                 }
 
                 await Task.Run(() => {
@@ -248,7 +253,7 @@ namespace SimpleLogUploader {
                 }
 
                 Log(window == null ? "Could not re-find uploader window after Yes." : "Re-found window: '" + window.Current.Name + "'");
-                if (window == null) return;
+                if (window == null) return false;
 
                 AutomationElement? doneButton = null;
                 Task findDone = Task.Run(() => {
@@ -261,7 +266,7 @@ namespace SimpleLogUploader {
 
                 if (!doneFound || doneButton == null) {
                     Log("Done button not found or timed out.");
-                    return;
+                    return false;
                 }
 
                 await Task.Run(() => {
@@ -272,18 +277,25 @@ namespace SimpleLogUploader {
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Done button. Delete sequence complete!");
 
+                return true;
+
             } catch (Exception ex) {
                 Log("Error: " + ex.Message);
+                return false;
             }
         }
 
-        private async Task UploadLog(string filePath) {
-            if (string.IsNullOrEmpty(selectedFolder)) return;
+        /// <summary>
+        /// Runs the upload sequence (launch/foreground app -> Upload a Log tab -> Choose... -> type filename -> Go!).
+        /// Returns true if every step completed successfully, false otherwise.
+        /// </summary>
+        private async Task<bool> UploadLog(string filePath) {
+            if (string.IsNullOrEmpty(selectedFolder)) return false;
 
             try {
                 if (!File.Exists(uploaderPath)) {
                     Log("Warcraft Logs Uploader not found. Please set the uploader path.");
-                    return;
+                    return false;
                 }
 
                 string appName = Path.GetFileNameWithoutExtension(uploaderPath);
@@ -319,7 +331,7 @@ namespace SimpleLogUploader {
 
                 if (window == null) {
                     Log("Could not find uploader window.");
-                    return;
+                    return false;
                 }
                 Log("Window found: '" + window.Current.Name + "'");
 
@@ -354,7 +366,7 @@ namespace SimpleLogUploader {
 
                 if (!chooseFound || chooseButton == null) {
                     Log("Choose button not found or timed out.");
-                    return;
+                    return false;
                 }
 
                 await Task.Run(() => {
@@ -383,7 +395,7 @@ namespace SimpleLogUploader {
 
                 Log(fileDialog == null ? "File dialog not found." : "File dialog found: '" + fileDialog.Current.Name + "'");
 
-                if (fileDialog == null) return;
+                if (fileDialog == null) return false;
 
                 SetForegroundWindow(new IntPtr(fileDialog.Current.NativeWindowHandle));
                 await Task.Delay(500);
@@ -404,7 +416,7 @@ namespace SimpleLogUploader {
 
                 Log(window == null ? "Could not re-find uploader window." : "Re-found window: '" + window.Current.Name + "'");
 
-                if (window == null) return;
+                if (window == null) return false;
 
                 AutomationElement? goButton = null;
                 Task findGo = Task.Run(() => {
@@ -417,7 +429,7 @@ namespace SimpleLogUploader {
 
                 if (!goFound || goButton == null) {
                     Log("Go button not found or timed out.");
-                    return;
+                    return false;
                 }
 
                 await Task.Run(() => {
@@ -428,8 +440,11 @@ namespace SimpleLogUploader {
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Go button. Done!");
 
+                return true;
+
             } catch (Exception ex) {
                 Log("Error: " + ex.Message);
+                return false;
             }
         }
 
