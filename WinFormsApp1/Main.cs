@@ -143,7 +143,7 @@ namespace SimpleLogUploader {
         /// Runs the delete sequence (Delete Now -> Yes -> Done) against the uploader app.
         /// Returns true if every step completed successfully, false otherwise.
         /// </summary>
-        private async Task<bool> DeleteLog() {
+        private async Task<bool> DeleteLog(CancellationToken token = default) {
             try {
                 if (!File.Exists(uploaderPath)) {
                     Log("Warcraft Logs Uploader not found. Please set the uploader path.");
@@ -165,7 +165,8 @@ namespace SimpleLogUploader {
 
                 AutomationElement? window = null;
                 for (int i = 0; i < 30; i++) {
-                    await Task.Delay(500);
+                    await Task.Delay(200, token);
+                    token.ThrowIfCancellationRequested();
                     AutomationElement desktop = AutomationElement.RootElement;
                     foreach (AutomationElement el in desktop.FindAll(TreeScope.Children, Condition.TrueCondition)) {
                         if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
@@ -189,7 +190,8 @@ namespace SimpleLogUploader {
                         new PropertyCondition(AutomationElement.NameProperty, "Delete Now"));
                 });
 
-                bool deleteFound = await Task.WhenAny(findDelete, Task.Delay(10000)) == findDelete;
+                bool deleteFound = await Task.WhenAny(findDelete, Task.Delay(10000, token)) == findDelete;
+                token.ThrowIfCancellationRequested();
                 Log("Delete Now button found: " + (deleteFound && deleteButton != null));
 
                 if (!deleteFound || deleteButton == null) {
@@ -201,11 +203,13 @@ namespace SimpleLogUploader {
                     InvokePattern? invoke = deleteButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
                     invoke?.Invoke();
                 });
-                await Task.Delay(500);
+                await Task.Delay(150, token);
+                token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Delete Now button.");
 
-                await Task.Delay(1500);
+                await Task.Delay(500, token);
+                token.ThrowIfCancellationRequested();
 
                 // Step 2: Yes (confirmation)
                 window = null;
@@ -225,7 +229,8 @@ namespace SimpleLogUploader {
                         new PropertyCondition(AutomationElement.NameProperty, "Yes"));
                 });
 
-                bool yesFound = await Task.WhenAny(findYes, Task.Delay(10000)) == findYes;
+                bool yesFound = await Task.WhenAny(findYes, Task.Delay(10000, token)) == findYes;
+                token.ThrowIfCancellationRequested();
                 Log("Yes button found: " + (yesFound && yesButton != null));
 
                 if (!yesFound || yesButton == null) {
@@ -237,11 +242,13 @@ namespace SimpleLogUploader {
                     InvokePattern? invoke = yesButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
                     invoke?.Invoke();
                 });
-                await Task.Delay(500);
+                await Task.Delay(150, token);
+                token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Yes button.");
 
-                await Task.Delay(1500);
+                await Task.Delay(500, token);
+                token.ThrowIfCancellationRequested();
 
                 // Step 3: Done
                 window = null;
@@ -261,7 +268,8 @@ namespace SimpleLogUploader {
                         new PropertyCondition(AutomationElement.NameProperty, "Done"));
                 });
 
-                bool doneFound = await Task.WhenAny(findDone, Task.Delay(10000)) == findDone;
+                bool doneFound = await Task.WhenAny(findDone, Task.Delay(10000, token)) == findDone;
+                token.ThrowIfCancellationRequested();
                 Log("Done button found: " + (doneFound && doneButton != null));
 
                 if (!doneFound || doneButton == null) {
@@ -273,12 +281,15 @@ namespace SimpleLogUploader {
                     InvokePattern? invoke = doneButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
                     invoke?.Invoke();
                 });
-                await Task.Delay(500);
+                await Task.Delay(150, token);
+                token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Done button. Delete sequence complete!");
 
                 return true;
 
+            } catch (OperationCanceledException) {
+                throw;
             } catch (Exception ex) {
                 Log("Error: " + ex.Message);
                 return false;
@@ -289,7 +300,7 @@ namespace SimpleLogUploader {
         /// Runs the upload sequence (launch/foreground app -> Upload a Log tab -> Choose... -> type filename -> Go!).
         /// Returns true if every step completed successfully, false otherwise.
         /// </summary>
-        private async Task<bool> UploadLog(string filePath) {
+        private async Task<bool> UploadLog(string filePath, CancellationToken token = default) {
             if (string.IsNullOrEmpty(selectedFolder)) return false;
 
             try {
@@ -312,13 +323,15 @@ namespace SimpleLogUploader {
                         UseShellExecute = true
                     });
                     proc?.WaitForInputIdle();
-                    await Task.Delay(8000);
-                    Log("App launched and waited 8 seconds.");
+                    await Task.Delay(4000, token);
+                    token.ThrowIfCancellationRequested();
+                    Log("App launched and waited 4 seconds.");
                 }
 
                 AutomationElement? window = null;
                 for (int i = 0; i < 30; i++) {
-                    await Task.Delay(500);
+                    await Task.Delay(200, token);
+                    token.ThrowIfCancellationRequested();
                     AutomationElement desktop = AutomationElement.RootElement;
                     foreach (AutomationElement el in desktop.FindAll(TreeScope.Children, Condition.TrueCondition)) {
                         if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
@@ -341,7 +354,8 @@ namespace SimpleLogUploader {
                         new PropertyCondition(AutomationElement.NameProperty, "Upload a Log"));
                 });
 
-                bool tabFound = await Task.WhenAny(findTab, Task.Delay(10000)) == findTab;
+                bool tabFound = await Task.WhenAny(findTab, Task.Delay(10000, token)) == findTab;
+                token.ThrowIfCancellationRequested();
                 Log("Upload a Log tab found: " + (tabFound && uploadTab != null));
 
                 if (tabFound && uploadTab != null) {
@@ -349,10 +363,12 @@ namespace SimpleLogUploader {
                         InvokePattern? invoke = uploadTab.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
                         invoke?.Invoke();
                     });
-                    await Task.Delay(500);
+                    await Task.Delay(150, token);
+                    token.ThrowIfCancellationRequested();
                     SendKeys.SendWait(" ");
                     Log("Invoked and sent Space on Upload a Log tab.");
-                    await Task.Delay(2000);
+                    await Task.Delay(500, token);
+                    token.ThrowIfCancellationRequested();
                 }
 
                 AutomationElement? chooseButton = null;
@@ -361,7 +377,8 @@ namespace SimpleLogUploader {
                         new PropertyCondition(AutomationElement.NameProperty, "Choose..."));
                 });
 
-                bool chooseFound = await Task.WhenAny(findChoose, Task.Delay(10000)) == findChoose;
+                bool chooseFound = await Task.WhenAny(findChoose, Task.Delay(10000, token)) == findChoose;
+                token.ThrowIfCancellationRequested();
                 Log("Choose button found: " + (chooseFound && chooseButton != null));
 
                 if (!chooseFound || chooseButton == null) {
@@ -373,15 +390,18 @@ namespace SimpleLogUploader {
                     InvokePattern? invoke = chooseButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
                     invoke?.Invoke();
                 });
-                await Task.Delay(500);
+                await Task.Delay(150, token);
+                token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Choose button.");
 
-                await Task.Delay(2000);
+                await Task.Delay(500, token);
+                token.ThrowIfCancellationRequested();
 
                 AutomationElement? fileDialog = null;
                 for (int i = 0; i < 10; i++) {
-                    await Task.Delay(500);
+                    await Task.Delay(200, token);
+                    token.ThrowIfCancellationRequested();
                     foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
                         if (el.Current.ControlType == ControlType.Window &&
                             el.Current.Name != "Warcraft Logs" &&
@@ -394,17 +414,19 @@ namespace SimpleLogUploader {
                 }
 
                 Log(fileDialog == null ? "File dialog not found." : "File dialog found: '" + fileDialog.Current.Name + "'");
-
                 if (fileDialog == null) return false;
 
                 SetForegroundWindow(new IntPtr(fileDialog.Current.NativeWindowHandle));
-                await Task.Delay(500);
+                await Task.Delay(150, token);
+                token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(Path.GetFileName(filePath));
-                await Task.Delay(500);
+                await Task.Delay(150, token);
+                token.ThrowIfCancellationRequested();
                 SendKeys.SendWait("{ENTER}");
                 Log("File name typed and Enter pressed.");
 
-                await Task.Delay(2000);
+                await Task.Delay(500, token);
+                token.ThrowIfCancellationRequested();
 
                 window = null;
                 foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
@@ -415,7 +437,6 @@ namespace SimpleLogUploader {
                 }
 
                 Log(window == null ? "Could not re-find uploader window." : "Re-found window: '" + window.Current.Name + "'");
-
                 if (window == null) return false;
 
                 AutomationElement? goButton = null;
@@ -424,7 +445,8 @@ namespace SimpleLogUploader {
                         new PropertyCondition(AutomationElement.NameProperty, "Go!"));
                 });
 
-                bool goFound = await Task.WhenAny(findGo, Task.Delay(10000)) == findGo;
+                bool goFound = await Task.WhenAny(findGo, Task.Delay(10000, token)) == findGo;
+                token.ThrowIfCancellationRequested();
                 Log("Go button found: " + (goFound && goButton != null));
 
                 if (!goFound || goButton == null) {
@@ -436,12 +458,15 @@ namespace SimpleLogUploader {
                     InvokePattern? invoke = goButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
                     invoke?.Invoke();
                 });
-                await Task.Delay(500);
+                await Task.Delay(150, token);
+                token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Go button. Done!");
 
                 return true;
 
+            } catch (OperationCanceledException) {
+                throw;
             } catch (Exception ex) {
                 Log("Error: " + ex.Message);
                 return false;

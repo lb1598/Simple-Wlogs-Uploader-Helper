@@ -43,19 +43,11 @@ namespace SimpleLogUploader {
             _ = RunAutomationLoop(automateCts.Token);
         }
 
-        /// <summary>
-        /// Signals the loop to stop after the current step finishes; does not abort
-        /// an in-progress Upload/Delete call.
-        /// </summary>
         private void StopAutomation() {
             if (!isAutomating) return;
 
-            Log("Auto-Upload stopping after current step finishes...");
+            Log("Auto-Upload stopping...");
             automateCts?.Cancel();
-
-            // isAutomating / button state are reset once the loop actually exits,
-            // so a fast double-click doesn't desync the UI from the real state.
-            btnAutomate.Enabled = false;
         }
 
         private void OnAutomationStopped() {
@@ -70,6 +62,8 @@ namespace SimpleLogUploader {
 
             Log("Auto-Upload stopped.");
         }
+
+
 
         private async Task RunAutomationLoop(CancellationToken token) {
             try {
@@ -86,7 +80,7 @@ namespace SimpleLogUploader {
                     }
 
                     Log("[Auto] Uploading " + fileMode.ToLower() + " file: " + Path.GetFileName(targetFile));
-                    bool uploaded = await UploadLog(targetFile);
+                    bool uploaded = await UploadLog(targetFile, token);
                     if (!uploaded) {
                         Log("[Auto] Upload step failed. Stopping Auto-Upload.");
                         break;
@@ -108,16 +102,16 @@ namespace SimpleLogUploader {
                     }
 
                     Log("[Auto] Delete Now button detected. Starting delete sequence...");
-                    bool deleted = await DeleteLog();
+                    bool deleted = await DeleteLog(token);
                     if (!deleted) {
                         Log("[Auto] Delete step failed. Stopping Auto-Upload.");
                         break;
                     }
 
                     Log("[Auto] Delete sequence complete. Looping back to Upload.");
-                    // Loop continues; cancellation is checked at the top of the while loop,
-                    // so the cycle just finished is allowed to complete in full.
                 }
+            } catch (OperationCanceledException) {
+                Log("[Auto] Stopped.");
             } catch (Exception ex) {
                 Log("[Auto] Unexpected error: " + ex.Message);
             } finally {
