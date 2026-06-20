@@ -42,6 +42,68 @@ namespace SimpleLogUploader {
             lblDebug.ScrollToCaret();
         }
 
+        /// <summary>
+        /// Polls for a named button by re-finding the uploader window on each attempt.
+        /// Returns the element if found, null on timeout or cancellation.
+        /// </summary>
+        private async Task<AutomationElement?> WaitForButton(
+            string buttonName,
+            TimeSpan interval,
+            TimeSpan timeout,
+            CancellationToken token) {
+
+            DateTime deadline = DateTime.UtcNow + timeout;
+
+            while (DateTime.UtcNow < deadline) {
+                if (token.IsCancellationRequested) return null;
+
+                AutomationElement? found = await Task.Run(() => {
+                    AutomationElement? window = FindUploaderWindow();
+                    if (window == null) return null;
+                    try {
+                        return window.FindFirst(TreeScope.Descendants,
+                            new PropertyCondition(AutomationElement.NameProperty, buttonName));
+                    } catch (ElementNotAvailableException) {
+                        return null;
+                    }
+                });
+
+                if (found != null) return found;
+
+                try {
+                    await Task.Delay(interval, token);
+                } catch (TaskCanceledException) {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        private AutomationElement? FindUploaderWindow() {
+            try {
+                foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
+                    try {
+                        if (el.Current.Name.Contains("Warcraft Logs"))
+                            return el;
+                    } catch (ElementNotAvailableException) {
+                        continue;
+                    }
+                }
+            } catch (ElementNotAvailableException) { }
+            return null;
+        }
+
+        private async Task<AutomationElement?> WaitForUploaderWindow(CancellationToken token, int attempts = 30, int delayMs = 200) {
+            for (int i = 0; i < attempts; i++) {
+                await Task.Delay(delayMs, token);
+                token.ThrowIfCancellationRequested();
+                AutomationElement? window = await Task.Run(FindUploaderWindow);
+                if (window != null) return window;
+            }
+            return null;
+        }
+
         private async Task LoadTokenOnStartup() {
             string savedClientId = Properties.Settings.Default.ClientId ?? string.Empty;
             string savedRedirect = Properties.Settings.Default.RedirectUrl ?? string.Empty;
@@ -139,10 +201,6 @@ namespace SimpleLogUploader {
             await DeleteLog();
         }
 
-        /// <summary>
-        /// Runs the delete sequence (Delete Now -> Yes -> Done) against the uploader app.
-        /// Returns true if every step completed successfully, false otherwise.
-        /// </summary>
         private async Task<bool> DeleteLog(CancellationToken token = default) {
             try {
                 if (!File.Exists(uploaderPath)) {
@@ -163,124 +221,43 @@ namespace SimpleLogUploader {
                 SetForegroundWindow(existing.MainWindowHandle);
                 Log("Brought existing window to foreground.");
 
-                AutomationElement? window = null;
-                for (int i = 0; i < 30; i++) {
-                    await Task.Delay(200, token);
-                    token.ThrowIfCancellationRequested();
-                    AutomationElement desktop = AutomationElement.RootElement;
-                    foreach (AutomationElement el in desktop.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                        if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
-                            window = el;
-                            break;
-                        }
-                    }
-                    if (window != null) break;
-                }
-
-                if (window == null) {
-                    Log("Could not find uploader window.");
-                    return false;
-                }
-                Log("Window found: '" + window.Current.Name + "'");
-
                 // Step 1: Delete Now
-                AutomationElement? deleteButton = null;
-                Task findDelete = Task.Run(() => {
-                    deleteButton = window.FindFirst(TreeScope.Descendants,
-                        new PropertyCondition(AutomationElement.NameProperty, "Delete Now"));
-                });
+                AutomationElement? deleteButton = await WaitForButton("Delete Now",
+                    interval: TimeSpan.FromMilliseconds(500),
+                    timeout: TimeSpan.FromSeconds(10),
+                    token);
+                Log("Delete Now button found: " + (deleteButton != null));
+                if (deleteButton == null) { Log("Delete Now button not found or timed out."); return false; }
 
-                bool deleteFound = await Task.WhenAny(findDelete, Task.Delay(10000, token)) == findDelete;
-                token.ThrowIfCancellationRequested();
-                Log("Delete Now button found: " + (deleteFound && deleteButton != null));
-
-                if (!deleteFound || deleteButton == null) {
-                    Log("Delete Now button not found or timed out.");
-                    return false;
-                }
-
-                await Task.Run(() => {
-                    InvokePattern? invoke = deleteButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
-                    invoke?.Invoke();
-                });
+                await Task.Run(() => (deleteButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
                 await Task.Delay(150, token);
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Delete Now button.");
 
-                await Task.Delay(500, token);
-                token.ThrowIfCancellationRequested();
+                // Step 2: Yes
+                AutomationElement? yesButton = await WaitForButton("Yes",
+                    interval: TimeSpan.FromMilliseconds(500),
+                    timeout: TimeSpan.FromSeconds(10),
+                    token);
+                Log("Yes button found: " + (yesButton != null));
+                if (yesButton == null) { Log("Yes button not found or timed out."); return false; }
 
-                // Step 2: Yes (confirmation)
-                window = null;
-                foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                    if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
-                        window = el;
-                        break;
-                    }
-                }
-
-                Log(window == null ? "Could not re-find uploader window after Delete Now." : "Re-found window: '" + window.Current.Name + "'");
-                if (window == null) return false;
-
-                AutomationElement? yesButton = null;
-                Task findYes = Task.Run(() => {
-                    yesButton = window.FindFirst(TreeScope.Descendants,
-                        new PropertyCondition(AutomationElement.NameProperty, "Yes"));
-                });
-
-                bool yesFound = await Task.WhenAny(findYes, Task.Delay(10000, token)) == findYes;
-                token.ThrowIfCancellationRequested();
-                Log("Yes button found: " + (yesFound && yesButton != null));
-
-                if (!yesFound || yesButton == null) {
-                    Log("Yes button not found or timed out.");
-                    return false;
-                }
-
-                await Task.Run(() => {
-                    InvokePattern? invoke = yesButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
-                    invoke?.Invoke();
-                });
+                await Task.Run(() => (yesButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
                 await Task.Delay(150, token);
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Yes button.");
 
-                await Task.Delay(500, token);
-                token.ThrowIfCancellationRequested();
-
                 // Step 3: Done
-                window = null;
-                foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                    if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
-                        window = el;
-                        break;
-                    }
-                }
+                AutomationElement? doneButton = await WaitForButton("Done",
+                    interval: TimeSpan.FromMilliseconds(500),
+                    timeout: TimeSpan.FromSeconds(10),
+                    token);
+                Log("Done button found: " + (doneButton != null));
+                if (doneButton == null) { Log("Done button not found or timed out."); return false; }
 
-                Log(window == null ? "Could not re-find uploader window after Yes." : "Re-found window: '" + window.Current.Name + "'");
-                if (window == null) return false;
-
-                AutomationElement? doneButton = null;
-                Task findDone = Task.Run(() => {
-                    doneButton = window.FindFirst(TreeScope.Descendants,
-                        new PropertyCondition(AutomationElement.NameProperty, "Done"));
-                });
-
-                bool doneFound = await Task.WhenAny(findDone, Task.Delay(10000, token)) == findDone;
-                token.ThrowIfCancellationRequested();
-                Log("Done button found: " + (doneFound && doneButton != null));
-
-                if (!doneFound || doneButton == null) {
-                    Log("Done button not found or timed out.");
-                    return false;
-                }
-
-                await Task.Run(() => {
-                    InvokePattern? invoke = doneButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
-                    invoke?.Invoke();
-                });
+                await Task.Run(() => (doneButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
                 await Task.Delay(150, token);
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
@@ -296,10 +273,6 @@ namespace SimpleLogUploader {
             }
         }
 
-        /// <summary>
-        /// Runs the upload sequence (launch/foreground app -> Upload a Log tab -> Choose... -> type filename -> Go!).
-        /// Returns true if every step completed successfully, false otherwise.
-        /// </summary>
         private async Task<bool> UploadLog(string filePath, CancellationToken token = default) {
             if (string.IsNullOrEmpty(selectedFolder)) return false;
 
@@ -328,136 +301,92 @@ namespace SimpleLogUploader {
                     Log("App launched and waited 4 seconds.");
                 }
 
-                AutomationElement? window = null;
-                for (int i = 0; i < 30; i++) {
-                    await Task.Delay(200, token);
-                    token.ThrowIfCancellationRequested();
-                    AutomationElement desktop = AutomationElement.RootElement;
-                    foreach (AutomationElement el in desktop.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                        if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
-                            window = el;
-                            break;
-                        }
-                    }
-                    if (window != null) break;
-                }
-
-                if (window == null) {
-                    Log("Could not find uploader window.");
-                    return false;
-                }
+                AutomationElement? window = await WaitForUploaderWindow(token);
+                if (window == null) { Log("Could not find uploader window."); return false; }
                 Log("Window found: '" + window.Current.Name + "'");
 
-                AutomationElement? uploadTab = null;
-                Task findTab = Task.Run(() => {
-                    uploadTab = window.FindFirst(TreeScope.Descendants,
-                        new PropertyCondition(AutomationElement.NameProperty, "Upload a Log"));
-                });
+                // Navigate to Upload tab
+                AutomationElement? uploadTab = await WaitForButton("Upload a Log",
+                    interval: TimeSpan.FromMilliseconds(500),
+                    timeout: TimeSpan.FromSeconds(10),
+                    token);
+                Log("Upload a Log tab found: " + (uploadTab != null));
 
-                bool tabFound = await Task.WhenAny(findTab, Task.Delay(10000, token)) == findTab;
-                token.ThrowIfCancellationRequested();
-                Log("Upload a Log tab found: " + (tabFound && uploadTab != null));
-
-                if (tabFound && uploadTab != null) {
-                    await Task.Run(() => {
-                        InvokePattern? invoke = uploadTab.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
-                        invoke?.Invoke();
-                    });
+                if (uploadTab != null) {
+                    await Task.Run(() => (uploadTab.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
                     await Task.Delay(150, token);
                     token.ThrowIfCancellationRequested();
                     SendKeys.SendWait(" ");
                     Log("Invoked and sent Space on Upload a Log tab.");
-                    await Task.Delay(500, token);
-                    token.ThrowIfCancellationRequested();
                 }
 
-                AutomationElement? chooseButton = null;
-                Task findChoose = Task.Run(() => {
-                    chooseButton = window.FindFirst(TreeScope.Descendants,
-                        new PropertyCondition(AutomationElement.NameProperty, "Choose..."));
-                });
+                // Choose file
+                AutomationElement? chooseButton = await WaitForButton("Choose...",
+                    interval: TimeSpan.FromMilliseconds(500),
+                    timeout: TimeSpan.FromSeconds(10),
+                    token);
+                Log("Choose button found: " + (chooseButton != null));
+                if (chooseButton == null) { Log("Choose button not found or timed out."); return false; }
 
-                bool chooseFound = await Task.WhenAny(findChoose, Task.Delay(10000, token)) == findChoose;
-                token.ThrowIfCancellationRequested();
-                Log("Choose button found: " + (chooseFound && chooseButton != null));
-
-                if (!chooseFound || chooseButton == null) {
-                    Log("Choose button not found or timed out.");
-                    return false;
-                }
-
-                await Task.Run(() => {
-                    InvokePattern? invoke = chooseButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
-                    invoke?.Invoke();
-                });
+                await Task.Run(() => (chooseButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
                 await Task.Delay(150, token);
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 Log("Invoked and sent Space on Choose button.");
 
-                await Task.Delay(500, token);
-                token.ThrowIfCancellationRequested();
-
+                // Wait for file dialog
                 AutomationElement? fileDialog = null;
                 for (int i = 0; i < 10; i++) {
                     await Task.Delay(200, token);
                     token.ThrowIfCancellationRequested();
-                    foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                        if (el.Current.ControlType == ControlType.Window &&
-                            el.Current.Name != "Warcraft Logs" &&
-                            el.Current.Name.Contains("Open")) {
-                            fileDialog = el;
-                            break;
+                    try {
+                        foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
+                            try {
+                                if (el.Current.ControlType == ControlType.Window &&
+                                    !el.Current.Name.Contains("Warcraft Logs") &&
+                                    el.Current.Name.Contains("Open")) {
+                                    fileDialog = el;
+                                    break;
+                                }
+                            } catch (ElementNotAvailableException) {
+                                continue;
+                            }
                         }
-                    }
+                    } catch (ElementNotAvailableException) { }
                     if (fileDialog != null) break;
                 }
 
                 Log(fileDialog == null ? "File dialog not found." : "File dialog found: '" + fileDialog.Current.Name + "'");
                 if (fileDialog == null) return false;
 
-                SetForegroundWindow(new IntPtr(fileDialog.Current.NativeWindowHandle));
-                await Task.Delay(150, token);
+                AutomationElement? fileNameBox = fileDialog.FindFirst(TreeScope.Descendants,
+                    new PropertyCondition(AutomationElement.AutomationIdProperty, "1148"));
+
+                if (fileNameBox == null) { Log("File name box not found."); return false; }
+
+                await Task.Run(() => (fileNameBox.GetCurrentPattern(ValuePattern.Pattern) as ValuePattern)?.SetValue(Path.GetFileName(filePath)));
+                Log("File name set to: " + Path.GetFileName(filePath));
+
+                await Task.Delay(200, token);
                 token.ThrowIfCancellationRequested();
-                SendKeys.SendWait(Path.GetFileName(filePath));
-                await Task.Delay(150, token);
-                token.ThrowIfCancellationRequested();
-                SendKeys.SendWait("{ENTER}");
-                Log("File name typed and Enter pressed.");
 
-                await Task.Delay(500, token);
-                token.ThrowIfCancellationRequested();
+                AutomationElement? openButton = fileDialog.FindFirst(TreeScope.Descendants,
+                    new PropertyCondition(AutomationElement.AutomationIdProperty, "1"));
 
-                window = null;
-                foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                    if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
-                        window = el;
-                        break;
-                    }
-                }
+                if (openButton == null) { Log("Open button not found."); return false; }
 
-                Log(window == null ? "Could not re-find uploader window." : "Re-found window: '" + window.Current.Name + "'");
-                if (window == null) return false;
+                await Task.Run(() => (openButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
+                Log("Open clicked.");
 
-                AutomationElement? goButton = null;
-                Task findGo = Task.Run(() => {
-                    goButton = window.FindFirst(TreeScope.Descendants,
-                        new PropertyCondition(AutomationElement.NameProperty, "Go!"));
-                });
+                // Poll for Go button — window re-found internally by WaitForButton
+                AutomationElement? goButton = await WaitForButton("Go!",
+                    interval: TimeSpan.FromMilliseconds(500),
+                    timeout: TimeSpan.FromSeconds(15),
+                    token);
+                Log("Go button found: " + (goButton != null));
+                if (goButton == null) { Log("Go button not found or timed out."); return false; }
 
-                bool goFound = await Task.WhenAny(findGo, Task.Delay(10000, token)) == findGo;
-                token.ThrowIfCancellationRequested();
-                Log("Go button found: " + (goFound && goButton != null));
-
-                if (!goFound || goButton == null) {
-                    Log("Go button not found or timed out.");
-                    return false;
-                }
-
-                await Task.Run(() => {
-                    InvokePattern? invoke = goButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
-                    invoke?.Invoke();
-                });
+                await Task.Run(() => (goButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
                 await Task.Delay(150, token);
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");

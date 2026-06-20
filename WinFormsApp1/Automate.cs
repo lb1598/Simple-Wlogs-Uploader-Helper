@@ -5,7 +5,7 @@ namespace SimpleLogUploader {
     /// Handles the "Auto-Upload" automation loop:
     ///   0. At the start of each cycle, check for a leftover "Done" button and click it if present.
     ///   1. Upload the target log file (invokes Go!).
-    ///   2. Poll every 3 seconds for the "Delete Now" button to appear (up to a 2 minute timeout).
+    ///   2. Poll every 3 seconds for the "Delete Now" button to appear (up to a 4 minute timeout).
     ///   3. Once found, run the delete sequence (Delete Now -> Yes -> Done).
     ///   4. After Done is invoked, start a new Upload cycle. Repeat until toggled off.
     /// </summary>
@@ -63,8 +63,6 @@ namespace SimpleLogUploader {
             Log("Auto-Upload stopped.");
         }
 
-
-
         private async Task RunAutomationLoop(CancellationToken token) {
             try {
                 while (!token.IsCancellationRequested) {
@@ -92,8 +90,12 @@ namespace SimpleLogUploader {
                     }
 
                     Log("[Auto] Waiting for Delete Now button to appear...");
-                    bool deleteReady = await WaitForDeleteNowButton(token);
-                    if (!deleteReady) {
+                    AutomationElement? deleteNowButton = await WaitForButton("Delete Now",
+                        interval: DeletePollInterval,
+                        timeout: DeletePollTimeout,
+                        token);
+
+                    if (deleteNowButton == null) {
                         if (token.IsCancellationRequested)
                             Log("[Auto] Stop requested while waiting for Delete Now button.");
                         else
@@ -120,69 +122,24 @@ namespace SimpleLogUploader {
         }
 
         /// <summary>
-        /// Polls every 3 seconds for the "Delete Now" button in the uploader window.
-        /// Returns true as soon as it's found, false on timeout or cancellation.
-        /// </summary>
-        private async Task<bool> WaitForDeleteNowButton(CancellationToken token) {
-            DateTime deadline = DateTime.UtcNow + DeletePollTimeout;
-
-            while (DateTime.UtcNow < deadline) {
-                if (token.IsCancellationRequested) return false;
-
-                if (DeleteNowButtonExists()) return true;
-
-                try {
-                    await Task.Delay(DeletePollInterval, token);
-                } catch (TaskCanceledException) {
-                    return false;
-                }
-            }
-
-            return false;
-        }
-
-        private bool DeleteNowButtonExists() {
-            AutomationElement? window = null;
-            foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
-                    window = el;
-                    break;
-                }
-            }
-
-            if (window == null) return false;
-
-            AutomationElement? deleteButton = window.FindFirst(TreeScope.Descendants,
-                new PropertyCondition(AutomationElement.NameProperty, "Delete Now"));
-
-            return deleteButton != null;
-        }
-
-        /// <summary>
-        /// Checks the uploader window for a leftover "Done" button (e.g. from a delete
-        /// sequence that completed but wasn't dismissed) and clicks it if present.
+        /// Checks the uploader window for a leftover "Done" button and clicks it if present.
         /// Returns true if a Done button was found and invoked, false otherwise.
         /// </summary>
         private async Task<bool> CheckAndClickDoneButton() {
-            AutomationElement? window = null;
-            foreach (AutomationElement el in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition)) {
-                if (el.Current.Name.Contains("Warcraft") || el.Current.Name.Contains("Logs")) {
-                    window = el;
-                    break;
-                }
-            }
-
+            AutomationElement? window = await Task.Run(FindUploaderWindow);
             if (window == null) return false;
 
-            AutomationElement? doneButton = window.FindFirst(TreeScope.Descendants,
-                new PropertyCondition(AutomationElement.NameProperty, "Done"));
+            AutomationElement? doneButton = null;
+            try {
+                doneButton = window.FindFirst(TreeScope.Descendants,
+                    new PropertyCondition(AutomationElement.NameProperty, "Done"));
+            } catch (ElementNotAvailableException) {
+                return false;
+            }
 
             if (doneButton == null) return false;
 
-            await Task.Run(() => {
-                InvokePattern? invoke = doneButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern;
-                invoke?.Invoke();
-            });
+            await Task.Run(() => (doneButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
             await Task.Delay(500);
             SendKeys.SendWait(" ");
 
