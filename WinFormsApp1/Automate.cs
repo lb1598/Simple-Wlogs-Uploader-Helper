@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows.Automation;
 
 namespace SimpleLogUploader {
@@ -16,6 +17,39 @@ namespace SimpleLogUploader {
 
         private CancellationTokenSource? automateCts;
         private bool isAutomating = false;
+
+        // ── Timing helper ────────────────────────────────────────────────────────
+        /// <summary>
+        /// Runs <paramref name="action"/>, logs elapsed time with <paramref name="label"/>,
+        /// and returns whatever the action returns.
+        /// </summary>
+        private async Task<T> Timed<T>(string label, Func<Task<T>> action) {
+            var sw = Stopwatch.StartNew();
+            try {
+                T result = await action();
+                sw.Stop();
+                Log($"[Timing] {label}: {sw.ElapsedMilliseconds} ms");
+                return result;
+            } catch {
+                sw.Stop();
+                Log($"[Timing] {label}: {sw.ElapsedMilliseconds} ms (threw exception)");
+                throw;
+            }
+        }
+
+        private async Task Timed(string label, Func<Task> action) {
+            var sw = Stopwatch.StartNew();
+            try {
+                await action();
+                sw.Stop();
+                Log($"[Timing] {label}: {sw.ElapsedMilliseconds} ms");
+            } catch {
+                sw.Stop();
+                Log($"[Timing] {label}: {sw.ElapsedMilliseconds} ms (threw exception)");
+                throw;
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void Automate_Click(object sender, EventArgs e) {
             if (isAutomating) {
@@ -64,11 +98,22 @@ namespace SimpleLogUploader {
         }
 
         private async Task RunAutomationLoop(CancellationToken token) {
+            int cycle = 0;
+            var loopSw = Stopwatch.StartNew();
+
             try {
                 while (!token.IsCancellationRequested) {
-                    bool doneCleared = await CheckAndClickDoneButton();
-                    if (doneCleared) {
-                        Log("[Auto] Found a leftover Done button and clicked it before starting upload.");
+                    cycle++;
+                    var cycleSw = Stopwatch.StartNew();
+                    Log($"[Timing] ── Cycle {cycle} started ──────────────────────────");
+
+                    // Step 0: Clear any leftover Done button
+                    bool doneCleared = false;
+                    if (cycle == 1) {
+                        doneCleared = await Timed($"Cycle {cycle} – CheckAndClickDoneButton",
+                            () => CheckAndClickDoneButton());
+                        if (doneCleared)
+                            Log("[Auto] Found a leftover Done button and clicked it before starting upload.");
                     }
 
                     targetFile = GetTargetFile(selectedFolder);
@@ -78,7 +123,11 @@ namespace SimpleLogUploader {
                     }
 
                     Log("[Auto] Uploading " + fileMode.ToLower() + " file: " + Path.GetFileName(targetFile));
-                    bool uploaded = await UploadLog(targetFile, token);
+
+                    // Step 1: Upload
+                    bool uploaded = await Timed($"Cycle {cycle} – UploadLog",
+                        () => UploadLog(targetFile, token));
+
                     if (!uploaded) {
                         Log("[Auto] Upload step failed. Stopping Auto-Upload.");
                         break;
@@ -89,11 +138,16 @@ namespace SimpleLogUploader {
                         break;
                     }
 
+                    // Step 2: Wait for Delete Now
                     Log("[Auto] Waiting for Delete Now button to appear...");
+                    var waitDeleteSw = Stopwatch.StartNew();
                     AutomationElement? deleteNowButton = await WaitForButton("Delete Now",
                         interval: DeletePollInterval,
                         timeout: DeletePollTimeout,
                         token);
+                    waitDeleteSw.Stop();
+                    Log($"[Timing] Cycle {cycle} – WaitForDeleteNow: {waitDeleteSw.ElapsedMilliseconds} ms " +
+                        $"(found: {deleteNowButton != null})");
 
                     if (deleteNowButton == null) {
                         if (token.IsCancellationRequested)
@@ -103,13 +157,18 @@ namespace SimpleLogUploader {
                         break;
                     }
 
+                    // Step 3: Delete sequence
                     Log("[Auto] Delete Now button detected. Starting delete sequence...");
-                    bool deleted = await DeleteLog(token);
+                    bool deleted = await Timed($"Cycle {cycle} – DeleteLog",
+                        () => DeleteLog(token));
+
                     if (!deleted) {
                         Log("[Auto] Delete step failed. Stopping Auto-Upload.");
                         break;
                     }
 
+                    cycleSw.Stop();
+                    Log($"[Timing] ── Cycle {cycle} complete in {cycleSw.ElapsedMilliseconds} ms ──────────");
                     Log("[Auto] Delete sequence complete. Looping back to Upload.");
                 }
             } catch (OperationCanceledException) {
@@ -117,6 +176,8 @@ namespace SimpleLogUploader {
             } catch (Exception ex) {
                 Log("[Auto] Unexpected error: " + ex.Message);
             } finally {
+                loopSw.Stop();
+                Log($"[Timing] Total automation session: {loopSw.ElapsedMilliseconds} ms over {cycle} cycle(s).");
                 OnAutomationStopped();
             }
         }
@@ -126,22 +187,33 @@ namespace SimpleLogUploader {
         /// Returns true if a Done button was found and invoked, false otherwise.
         /// </summary>
         private async Task<bool> CheckAndClickDoneButton() {
+            var sw = Stopwatch.StartNew();
+
             AutomationElement? window = await Task.Run(FindUploaderWindow);
+            Log($"[Timing]   CheckAndClickDoneButton – FindUploaderWindow: {sw.ElapsedMilliseconds} ms");
+
             if (window == null) return false;
 
-            AutomationElement? doneButton = null;
-            try {
-                doneButton = window.FindFirst(TreeScope.Descendants,
-                    new PropertyCondition(AutomationElement.NameProperty, "Done"));
-            } catch (ElementNotAvailableException) {
-                return false;
-            }
+            var findSw = Stopwatch.StartNew();
+            AutomationElement? doneButton = await Task.Run(() => {
+                try {
+                    return window.FindFirst(TreeScope.Descendants,
+                        new PropertyCondition(AutomationElement.NameProperty, "Done"));
+                } catch (ElementNotAvailableException) {
+                    return null;
+                }
+            });
+            findSw.Stop();
+            Log($"[Timing]   CheckAndClickDoneButton – FindFirst(Done): {findSw.ElapsedMilliseconds} ms (found: {doneButton != null})");
 
             if (doneButton == null) return false;
 
+            var invokeSw = Stopwatch.StartNew();
             await Task.Run(() => (doneButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
             await Task.Delay(500);
             SendKeys.SendWait(" ");
+            invokeSw.Stop();
+            Log($"[Timing]   CheckAndClickDoneButton – Invoke+Delay: {invokeSw.ElapsedMilliseconds} ms");
 
             return true;
         }
