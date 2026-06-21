@@ -42,6 +42,19 @@ namespace SimpleLogUploader {
             lblDebug.ScrollToCaret();
         }
 
+        private void LogTiming(string message) {
+            lblTiming.AppendText(Environment.NewLine + message);
+            lblTiming.ScrollToCaret();
+        }
+
+        private void BtnToggleDebug_Click(object sender, EventArgs e) {
+            lblDebug.BringToFront();
+        }
+
+        private void BtnToggleTiming_Click(object sender, EventArgs e) {
+            lblTiming.BringToFront();
+        }
+
         /// <summary>
         /// Polls for a named button by re-finding the uploader window on each attempt.
         /// Returns the element if found, null on timeout or cancellation.
@@ -203,7 +216,7 @@ namespace SimpleLogUploader {
 
         private async Task<bool> DeleteLog(CancellationToken token = default) {
             var totalSw = Stopwatch.StartNew();
-            Log("[Timing] DeleteLog started.");
+            LogTiming("[Timing] DeleteLog started.");
 
             try {
                 if (!File.Exists(uploaderPath)) {
@@ -217,7 +230,7 @@ namespace SimpleLogUploader {
                 Process? existing = Process.GetProcessesByName(appName)
                     .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
                 procSw.Stop();
-                Log($"[Timing]   GetProcessesByName: {procSw.ElapsedMilliseconds} ms – already running: {existing != null}");
+                LogTiming($"[Timing]   GetProcessesByName: {procSw.ElapsedMilliseconds} ms – already running: {existing != null}");
 
                 if (existing == null) {
                     Log("Uploader is not running. Nothing to delete.");
@@ -234,7 +247,7 @@ namespace SimpleLogUploader {
                     timeout: TimeSpan.FromSeconds(10),
                     token);
                 step1Sw.Stop();
-                Log($"[Timing]   WaitForButton('Delete Now'): {step1Sw.ElapsedMilliseconds} ms – found: {deleteButton != null}");
+                LogTiming($"[Timing]   WaitForButton('Delete Now'): {step1Sw.ElapsedMilliseconds} ms – found: {deleteButton != null}");
 
                 if (deleteButton == null) { Log("Delete Now button not found or timed out."); return false; }
 
@@ -244,7 +257,7 @@ namespace SimpleLogUploader {
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 invoke1Sw.Stop();
-                Log($"[Timing]   Invoke Delete Now + delay: {invoke1Sw.ElapsedMilliseconds} ms");
+                LogTiming($"[Timing]   Invoke Delete Now + delay: {invoke1Sw.ElapsedMilliseconds} ms");
 
                 // Step 2: Yes
                 var step2Sw = Stopwatch.StartNew();
@@ -253,7 +266,7 @@ namespace SimpleLogUploader {
                     timeout: TimeSpan.FromSeconds(10),
                     token);
                 step2Sw.Stop();
-                Log($"[Timing]   WaitForButton('Yes'): {step2Sw.ElapsedMilliseconds} ms – found: {yesButton != null}");
+                LogTiming($"[Timing]   WaitForButton('Yes'): {step2Sw.ElapsedMilliseconds} ms – found: {yesButton != null}");
 
                 if (yesButton == null) { Log("Yes button not found or timed out."); return false; }
 
@@ -263,7 +276,7 @@ namespace SimpleLogUploader {
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 invoke2Sw.Stop();
-                Log($"[Timing]   Invoke Yes + delay: {invoke2Sw.ElapsedMilliseconds} ms");
+                LogTiming($"[Timing]   Invoke Yes + delay: {invoke2Sw.ElapsedMilliseconds} ms");
 
                 // Step 3: Done
                 var step3Sw = Stopwatch.StartNew();
@@ -272,7 +285,7 @@ namespace SimpleLogUploader {
                     timeout: TimeSpan.FromSeconds(10),
                     token);
                 step3Sw.Stop();
-                Log($"[Timing]   WaitForButton('Done'): {step3Sw.ElapsedMilliseconds} ms – found: {doneButton != null}");
+                LogTiming($"[Timing]   WaitForButton('Done'): {step3Sw.ElapsedMilliseconds} ms – found: {doneButton != null}");
 
                 if (doneButton == null) { Log("Done button not found or timed out."); return false; }
 
@@ -282,19 +295,20 @@ namespace SimpleLogUploader {
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 invoke3Sw.Stop();
-                Log($"[Timing]   Invoke Done + delay: {invoke3Sw.ElapsedMilliseconds} ms");
+                LogTiming($"[Timing]   Invoke Done + delay: {invoke3Sw.ElapsedMilliseconds} ms");
 
                 totalSw.Stop();
-                Log($"[Timing] DeleteLog complete: {totalSw.ElapsedMilliseconds} ms total.");
+                LogTiming($"[Timing] DeleteLog complete: {totalSw.ElapsedMilliseconds} ms total.");
                 return true;
 
             } catch (OperationCanceledException) {
                 totalSw.Stop();
-                Log($"[Timing] DeleteLog cancelled after {totalSw.ElapsedMilliseconds} ms.");
+                LogTiming($"[Timing] DeleteLog cancelled after {totalSw.ElapsedMilliseconds} ms.");
                 throw;
             } catch (Exception ex) {
                 totalSw.Stop();
-                Log($"[Timing] DeleteLog failed after {totalSw.ElapsedMilliseconds} ms – {ex.Message}");
+                Log("Error: " + ex.Message);
+                LogTiming($"[Timing] DeleteLog failed after {totalSw.ElapsedMilliseconds} ms.");
                 return false;
             }
         }
@@ -303,7 +317,7 @@ namespace SimpleLogUploader {
             if (string.IsNullOrEmpty(selectedFolder)) return false;
 
             var totalSw = Stopwatch.StartNew();
-            Log("[Timing] UploadLog started.");
+            LogTiming("[Timing] UploadLog started.");
 
             try {
                 if (!File.Exists(uploaderPath)) {
@@ -313,12 +327,11 @@ namespace SimpleLogUploader {
 
                 string appName = Path.GetFileNameWithoutExtension(uploaderPath);
 
-                // Process lookup
                 var procSw = Stopwatch.StartNew();
                 Process? existing = Process.GetProcessesByName(appName)
                     .FirstOrDefault(p => p.MainWindowHandle != IntPtr.Zero);
                 procSw.Stop();
-                Log($"[Timing]   GetProcessesByName: {procSw.ElapsedMilliseconds} ms – already running: {existing != null}");
+                LogTiming($"[Timing]   GetProcessesByName: {procSw.ElapsedMilliseconds} ms – already running: {existing != null}");
 
                 if (existing != null) {
                     SetForegroundWindow(existing.MainWindowHandle);
@@ -333,26 +346,24 @@ namespace SimpleLogUploader {
                     await Task.Delay(4000, token);
                     token.ThrowIfCancellationRequested();
                     launchSw.Stop();
-                    Log($"[Timing]   Launch + 4 s startup delay: {launchSw.ElapsedMilliseconds} ms");
+                    LogTiming($"[Timing]   Launch + 4 s startup delay: {launchSw.ElapsedMilliseconds} ms");
                 }
 
-                // Wait for window
                 var windowSw = Stopwatch.StartNew();
                 AutomationElement? window = await WaitForUploaderWindow(token);
                 windowSw.Stop();
-                Log($"[Timing]   WaitForUploaderWindow: {windowSw.ElapsedMilliseconds} ms – found: {window != null}");
+                LogTiming($"[Timing]   WaitForUploaderWindow: {windowSw.ElapsedMilliseconds} ms – found: {window != null}");
 
                 if (window == null) { Log("Could not find uploader window."); return false; }
                 Log("Window found: '" + window.Current.Name + "'");
 
-                // Upload tab
                 var tabSw = Stopwatch.StartNew();
                 AutomationElement? uploadTab = await WaitForButton("Upload a Log",
                     interval: TimeSpan.FromMilliseconds(500),
                     timeout: TimeSpan.FromSeconds(10),
                     token);
                 tabSw.Stop();
-                Log($"[Timing]   WaitForButton('Upload a Log'): {tabSw.ElapsedMilliseconds} ms – found: {uploadTab != null}");
+                LogTiming($"[Timing]   WaitForButton('Upload a Log'): {tabSw.ElapsedMilliseconds} ms – found: {uploadTab != null}");
 
                 if (uploadTab != null) {
                     var invokeTabSw = Stopwatch.StartNew();
@@ -361,17 +372,16 @@ namespace SimpleLogUploader {
                     token.ThrowIfCancellationRequested();
                     SendKeys.SendWait(" ");
                     invokeTabSw.Stop();
-                    Log($"[Timing]   Invoke Upload a Log tab + delay: {invokeTabSw.ElapsedMilliseconds} ms");
+                    LogTiming($"[Timing]   Invoke Upload a Log tab + delay: {invokeTabSw.ElapsedMilliseconds} ms");
                 }
 
-                // Choose button
                 var chooseSw = Stopwatch.StartNew();
                 AutomationElement? chooseButton = await WaitForButton("Choose...",
                     interval: TimeSpan.FromMilliseconds(500),
                     timeout: TimeSpan.FromSeconds(10),
                     token);
                 chooseSw.Stop();
-                Log($"[Timing]   WaitForButton('Choose...'): {chooseSw.ElapsedMilliseconds} ms – found: {chooseButton != null}");
+                LogTiming($"[Timing]   WaitForButton('Choose...'): {chooseSw.ElapsedMilliseconds} ms – found: {chooseButton != null}");
 
                 if (chooseButton == null) { Log("Choose button not found or timed out."); return false; }
 
@@ -381,9 +391,8 @@ namespace SimpleLogUploader {
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 invokeChooseSw.Stop();
-                Log($"[Timing]   Invoke Choose + delay: {invokeChooseSw.ElapsedMilliseconds} ms");
+                LogTiming($"[Timing]   Invoke Choose + delay: {invokeChooseSw.ElapsedMilliseconds} ms");
 
-                // File dialog
                 var dialogSw = Stopwatch.StartNew();
                 AutomationElement? fileDialog = null;
                 for (int i = 0; i < 10; i++) {
@@ -406,7 +415,7 @@ namespace SimpleLogUploader {
                     if (fileDialog != null) break;
                 }
                 dialogSw.Stop();
-                Log($"[Timing]   Locate file dialog: {dialogSw.ElapsedMilliseconds} ms – found: {fileDialog != null}");
+                LogTiming($"[Timing]   Locate file dialog: {dialogSw.ElapsedMilliseconds} ms – found: {fileDialog != null}");
 
                 if (fileDialog == null) { Log("File dialog not found."); return false; }
                 Log("File dialog found: '" + fileDialog.Current.Name + "'");
@@ -418,7 +427,7 @@ namespace SimpleLogUploader {
                 var setValueSw = Stopwatch.StartNew();
                 await Task.Run(() => (fileNameBox.GetCurrentPattern(ValuePattern.Pattern) as ValuePattern)?.SetValue(Path.GetFileName(filePath)));
                 setValueSw.Stop();
-                Log($"[Timing]   SetValue(filename): {setValueSw.ElapsedMilliseconds} ms – '{Path.GetFileName(filePath)}'");
+                LogTiming($"[Timing]   SetValue(filename): {setValueSw.ElapsedMilliseconds} ms – '{Path.GetFileName(filePath)}'");
 
                 await Task.Delay(200, token);
                 token.ThrowIfCancellationRequested();
@@ -430,16 +439,15 @@ namespace SimpleLogUploader {
                 var openSw = Stopwatch.StartNew();
                 await Task.Run(() => (openButton.GetCurrentPattern(InvokePattern.Pattern) as InvokePattern)?.Invoke());
                 openSw.Stop();
-                Log($"[Timing]   Invoke Open (file dialog): {openSw.ElapsedMilliseconds} ms");
+                LogTiming($"[Timing]   Invoke Open (file dialog): {openSw.ElapsedMilliseconds} ms");
 
-                // Go! button
                 var goWaitSw = Stopwatch.StartNew();
                 AutomationElement? goButton = await WaitForButton("Go!",
                     interval: TimeSpan.FromMilliseconds(500),
                     timeout: TimeSpan.FromSeconds(15),
                     token);
                 goWaitSw.Stop();
-                Log($"[Timing]   WaitForButton('Go!'): {goWaitSw.ElapsedMilliseconds} ms – found: {goButton != null}");
+                LogTiming($"[Timing]   WaitForButton('Go!'): {goWaitSw.ElapsedMilliseconds} ms – found: {goButton != null}");
 
                 if (goButton == null) { Log("Go button not found or timed out."); return false; }
 
@@ -449,25 +457,30 @@ namespace SimpleLogUploader {
                 token.ThrowIfCancellationRequested();
                 SendKeys.SendWait(" ");
                 goInvokeSw.Stop();
-                Log($"[Timing]   Invoke Go! + delay: {goInvokeSw.ElapsedMilliseconds} ms");
+                LogTiming($"[Timing]   Invoke Go! + delay: {goInvokeSw.ElapsedMilliseconds} ms");
 
                 totalSw.Stop();
-                Log($"[Timing] UploadLog complete: {totalSw.ElapsedMilliseconds} ms total.");
+                LogTiming($"[Timing] UploadLog complete: {totalSw.ElapsedMilliseconds} ms total.");
                 return true;
 
             } catch (OperationCanceledException) {
                 totalSw.Stop();
-                Log($"[Timing] UploadLog cancelled after {totalSw.ElapsedMilliseconds} ms.");
+                LogTiming($"[Timing] UploadLog cancelled after {totalSw.ElapsedMilliseconds} ms.");
                 throw;
             } catch (Exception ex) {
                 totalSw.Stop();
-                Log($"[Timing] UploadLog failed after {totalSw.ElapsedMilliseconds} ms – {ex.Message}");
+                Log("Error: " + ex.Message);
+                LogTiming($"[Timing] UploadLog failed after {totalSw.ElapsedMilliseconds} ms.");
                 return false;
             }
         }
 
         private void Main_Load(object sender, EventArgs e) {
             //
+        }
+
+        private void btnUpload_Click(object sender, EventArgs e) {
+
         }
     }
 }

@@ -16,25 +16,29 @@
             btnDelete = new Button();
             btnLogin = new Button();
             lblDebug = new TextBox();
+            lblTiming = new TextBox();
             btnAutomate = new Button();
+            btnToggleDebug = new Button();
+            btnToggleTiming = new Button();
             SuspendLayout();
             // 
             // btnUpload
             // 
             btnUpload.BackColor = SystemColors.Control;
             btnUpload.ForeColor = Color.Black;
-            btnUpload.Location = new Point(520, 166);
+            btnUpload.Location = new Point(520, 241);
             btnUpload.Name = "btnUpload";
             btnUpload.Size = new Size(75, 38);
             btnUpload.TabIndex = 2;
             btnUpload.Text = "Upload";
             btnUpload.UseVisualStyleBackColor = false;
+            btnUpload.Click += btnUpload_Click;
             // 
             // btnDelete
             // 
             btnDelete.BackColor = SystemColors.Control;
             btnDelete.ForeColor = Color.Black;
-            btnDelete.Location = new Point(520, 122);
+            btnDelete.Location = new Point(434, 241);
             btnDelete.Name = "btnDelete";
             btnDelete.Size = new Size(75, 38);
             btnDelete.TabIndex = 3;
@@ -53,7 +57,7 @@
             // 
             // lblDebug
             // 
-            lblDebug.Location = new Point(12, 12);
+            lblDebug.Location = new Point(12, 41);
             lblDebug.Multiline = true;
             lblDebug.Name = "lblDebug";
             lblDebug.ReadOnly = true;
@@ -62,24 +66,62 @@
             lblDebug.TabIndex = 6;
             lblDebug.Text = "Status: ready";
             // 
+            // lblTiming
+            // 
+            lblTiming.Location = new Point(12, 41);
+            lblTiming.Multiline = true;
+            lblTiming.Name = "lblTiming";
+            lblTiming.ReadOnly = true;
+            lblTiming.ScrollBars = ScrollBars.Vertical;
+            lblTiming.Size = new Size(583, 192);
+            lblTiming.TabIndex = 7;
+            lblTiming.Text = "Timing: ready";
+            // 
             // btnAutomate
             // 
             btnAutomate.BackColor = SystemColors.Control;
             btnAutomate.ForeColor = Color.Black;
-            btnAutomate.Location = new Point(12, 210);
+            btnAutomate.Location = new Point(12, 241);
             btnAutomate.Name = "btnAutomate";
-            btnAutomate.Size = new Size(120, 30);
+            btnAutomate.Size = new Size(120, 38);
             btnAutomate.TabIndex = 8;
             btnAutomate.Text = "Auto-Upload";
             btnAutomate.UseVisualStyleBackColor = false;
             // 
+            // btnToggleDebug
+            // 
+            btnToggleDebug.BackColor = SystemColors.Control;
+            btnToggleDebug.ForeColor = Color.Black;
+            btnToggleDebug.Location = new Point(12, 12);
+            btnToggleDebug.Name = "btnToggleDebug";
+            btnToggleDebug.Size = new Size(75, 23);
+            btnToggleDebug.TabIndex = 9;
+            btnToggleDebug.Text = "Log";
+            btnToggleDebug.UseVisualStyleBackColor = false;
+            btnToggleDebug.Click += BtnToggleDebug_Click;
+            // 
+            // btnToggleTiming
+            // 
+            btnToggleTiming.BackColor = SystemColors.Control;
+            btnToggleTiming.ForeColor = Color.Black;
+            btnToggleTiming.Location = new Point(93, 12);
+            btnToggleTiming.Name = "btnToggleTiming";
+            btnToggleTiming.Size = new Size(75, 23);
+            btnToggleTiming.TabIndex = 10;
+            btnToggleTiming.Text = "Timing";
+            btnToggleTiming.UseVisualStyleBackColor = false;
+            btnToggleTiming.Click += BtnToggleTiming_Click;
+            // 
             // Main
             // 
             BackColor = SystemColors.Control;
-            ClientSize = new Size(607, 252);
+            ClientSize = new Size(607, 287);
+            Controls.Add(btnToggleDebug);
+            Controls.Add(btnToggleTiming);
+            Controls.Add(lblTiming);
+            Controls.Add(lblDebug);
             Controls.Add(btnAutomate);
             Controls.Add(btnDelete);
-            Controls.Add(lblDebug);
             Controls.Add(btnUpload);
             Controls.Add(btnLogin);
             Name = "Main";
@@ -94,7 +136,10 @@
         private Button btnUpload;
         private Button btnLogin;
         private TextBox lblDebug;
+        private TextBox lblTiming;
         private Button btnDelete;
         private Button btnAutomate;
+        private Button btnToggleDebug;
+        private Button btnToggleTiming;
     }
 }
